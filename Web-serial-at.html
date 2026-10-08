@@ -1,0 +1,1068 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SERLINK-9 · Web Serial Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============ Base variables ============ */
+:root{
+  --bg:#f4f6f7; --panel:#ffffff; --panel2:#eef1f3; --line:#d9dee3; --line2:#b9c2ca;
+  --txt:#1a2228; --muted:#5f6d78; --dim:#8a959f;
+  --amber:#d97a06; --green:#189d64; --red:#e0402f; --cyan:#0d8fd6;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  --disp:"Bricolage Grotesque",var(--sans);
+}
+/* "Browser default font": drop custom fonts page-wide, inherit the UA default */
+html.browserfont body{font-family:initial}
+html.browserfont *{font-family:inherit}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--txt); font-family:var(--sans); font-size:calc(var(--fsz,14px)*14/14);
+  min-height:100vh; -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+/* ============ Background ============ */
+.bg{position:fixed; inset:0; z-index:-1; pointer-events:none}
+.bg .grid{position:absolute; inset:-10%;
+  background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:34px 34px; opacity:.28;
+  mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,#000 20%,transparent 85%);
+}
+.bg .glow{position:absolute; inset:0;
+  background:radial-gradient(700px 320px at 12% -6%,rgba(255,176,58,.10),transparent 70%),
+             radial-gradient(600px 340px at 88% 4%,rgba(74,222,155,.08),transparent 70%),
+             radial-gradient(900px 500px at 50% 110%,rgba(92,200,255,.06),transparent 70%);
+  animation:breathe 14s ease-in-out infinite alternate;
+}
+@keyframes breathe{from{opacity:.75}to{opacity:1}}
+.bg .noise{position:absolute;inset:0;opacity:.035;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");}
+
+.wrap{max-width:1520px; margin:0 auto; padding:16px 18px 30px}
+
+/* ============ Front panel ============ */
+.bezel{
+  position:sticky; top:0; z-index:30;
+  display:flex; align-items:center; gap:20px; flex-wrap:wrap;
+  padding:13px 22px; margin:0 -18px 16px;
+  background:linear-gradient(180deg,#ffffff 0%,#eef1f3 100%);
+  border-block:1px solid var(--line2);
+  box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 18px 34px -22px rgba(0,0,0,.18);
+}
+.bezel::before,.bezel::after{content:"";position:absolute;top:50%;width:7px;height:7px;border-radius:50%;
+  transform:translateY(-50%);background:radial-gradient(circle at 35% 30%,#c3ccd3,#94a0a9 70%);box-shadow:0 1px 0 rgba(255,255,255,.7)}
+.bezel::before{left:7px}.bezel::after{right:7px}
+.brand{line-height:1}
+.brand h1{font-family:var(--disp); font-weight:800; font-size:calc(var(--fsz,14px)*29/14); letter-spacing:-.02em; margin:0}
+.brand h1 span{color:var(--amber)}
+.brand h1 em{font-style:normal;color:var(--dim);font-weight:400}
+.brand p{margin:5px 0 0; font-family:var(--mono); font-size:calc(var(--fsz,14px)*9.5/14); letter-spacing:.22em; color:var(--dim); text-transform:uppercase}
+
+.lamps{display:flex; gap:14px; padding:9px 14px; border:1px solid var(--line); background:#eef1f3; border-radius:3px}
+.lamp{display:flex; flex-direction:column; align-items:center; gap:6px; min-width:34px}
+.lamp i{width:9px;height:9px;border-radius:50%;background:#c9d2d8;box-shadow:inset 0 0 3px rgba(0,0,0,.25);transition:.18s}
+.lamp span{font-family:var(--mono);font-size:calc(var(--fsz,14px)*8.5/14);letter-spacing:.12em;color:var(--dim)}
+.lamp.on i{background:var(--c,var(--green));box-shadow:0 0 10px var(--c,var(--green)),0 0 3px #fff inset}
+.lamp.on span{color:var(--txt)}
+
+.counters{display:flex; gap:18px; margin-left:auto}
+.ct{text-align:right; min-width:74px}
+.ct b{display:block; font-family:var(--mono); font-weight:600; font-size:calc(var(--fsz,14px)*22/14); font-variant-numeric:tabular-nums; letter-spacing:-.02em; transition:transform .12s}
+.ct b.bump{transform:scale(1.09)}
+.ct span{font-family:var(--mono);font-size:calc(var(--fsz,14px)*9/14);letter-spacing:.16em;color:var(--dim)}
+#rxC b{color:var(--green)} #txC b{color:var(--amber)} #rtC b{color:var(--cyan)}
+
+.db9{width:112px;height:66px;flex:none}
+.db9 .shell{fill:#eef1f3;stroke:#9aa7b0;stroke-width:1.4}
+.db9 .ds{fill:#ffffff;stroke:#aab6bf;stroke-width:1.2}
+.db9 .scr{fill:#b9c2ca}
+.db9 circle.pin{fill:#c3ccd3;stroke:#8a97a0;stroke-width:.6;transition:fill .12s,filter .12s}
+.db9 circle.pin.rx{fill:var(--green);filter:drop-shadow(0 0 3px var(--green))}
+.db9 circle.pin.tx{fill:var(--amber);filter:drop-shadow(0 0 3px var(--amber))}
+
+.btn{font-family:var(--sans);font-weight:600;font-size:calc(var(--fsz,14px)*13/14);color:var(--txt);
+  background:linear-gradient(180deg,#ffffff,#e9edf0);border:1px solid var(--line2);border-radius:3px;
+  padding:9px 15px;cursor:pointer;transition:.16s;letter-spacing:.02em}
+.btn:hover{border-color:#8a97a0;background:linear-gradient(180deg,#ffffff,#f2f5f7);transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn.main{padding:12px 26px;font-size:calc(var(--fsz,14px)*14/14);font-weight:600;letter-spacing:.06em;
+  background:linear-gradient(180deg,#e2f4ea,#d2ecdf);border-color:#7cc29e;color:#0c6b3f;min-width:132px}
+.btn.main:hover{border-color:var(--green);box-shadow:0 0 0 1px rgba(74,222,155,.25),0 0 22px -6px var(--green)}
+.btn.main.live{background:linear-gradient(180deg,#fdeae7,#f9dcd8);border-color:#e08b80;color:#a3261a}
+.btn.main.live:hover{border-color:var(--red);box-shadow:0 0 0 1px rgba(255,95,82,.25),0 0 22px -6px var(--red)}
+.btn.main.busy{animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.6}}
+
+/* ============ Status bar ============ */
+.statusbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;font-family:var(--mono);font-size:calc(var(--fsz,14px)*11/14)}
+.chip{border:1px solid var(--line);background:#ffffff;padding:5px 10px;border-radius:2px;color:var(--muted);letter-spacing:.06em}
+.chip b{color:var(--txt);font-weight:500}
+.chip.state{border-color:#3f6b52;color:#9fe6c1}
+.chip.state.err{border-color:#e08b80;color:#b52a1b}
+.chip.state.idle{border-color:var(--line2);color:var(--muted)}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:6px;vertical-align:middle}
+.chip.state .dot{animation:blink 1.4s infinite}
+@keyframes blink{50%{opacity:.25}}
+
+/* ============ Layout ============ */
+.shell{display:grid;grid-template-columns:288px minmax(0,1fr) 340px;gap:14px;align-items:start}
+.panel{position:relative;background:linear-gradient(180deg,var(--panel),#f4f6f7);
+  border:1px solid var(--line);border-radius:3px;box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 22px 44px -30px rgba(0,0,0,.15);
+  opacity:0;transform:translateY(14px);animation:rise .6s cubic-bezier(.2,.7,.3,1) forwards}
+.panel:nth-child(1){animation-delay:.05s}.panel:nth-child(2){animation-delay:.14s}.panel:nth-child(3){animation-delay:.23s}
+@keyframes rise{to{opacity:1;transform:none}}
+.panel::before,.panel::after{content:"";position:absolute;width:9px;height:9px;border-color:var(--line2);opacity:.9}
+.panel::before{top:-1px;left:-1px;border-top:1px solid;border-left:1px solid}
+.panel::after{bottom:-1px;right:-1px;border-bottom:1px solid;border-right:1px solid}
+.phead{display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.014)}
+.phead h2{margin:0;font-family:var(--mono);font-size:calc(var(--fsz,14px)*10.5/14);font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--txt)}
+.phead .idx{font-family:var(--mono);font-size:calc(var(--fsz,14px)*9/14);color:var(--amber);letter-spacing:.1em}
+.phead .sp{margin-left:auto;font-family:var(--mono);font-size:calc(var(--fsz,14px)*9.5/14);color:var(--dim);letter-spacing:.1em}
+.pbody{padding:14px}
+
+/* ============ Forms ============ */
+.field{margin-bottom:13px}
+.field:last-child{margin-bottom:0}
+label.lbl{display:block;font-family:var(--mono);font-size:calc(var(--fsz,14px)*9.5/14);letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+select,input[type=text],input[type=number],textarea{
+  width:100%;background:#ffffff;border:1px solid var(--line);color:var(--txt);
+  font-family:var(--mono);font-size:calc(var(--fsz,14px)*12.5/14);padding:9px 10px;border-radius:2px;transition:.16s;outline:none}
+select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px;background-repeat:no-repeat;padding-right:28px;cursor:pointer}
+select:hover,input:hover{border-color:var(--line2)}
+select:focus,input:focus,textarea:focus{border-color:var(--amber);box-shadow:0 0 0 2px rgba(255,176,58,.12)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}
+.seg{display:flex;border:1px solid var(--line);border-radius:2px;overflow:hidden;background:#ffffff}
+.seg button{flex:1;background:transparent;border:0;color:var(--muted);font-family:var(--mono);font-size:calc(var(--fsz,14px)*11/14);padding:8px 4px;cursor:pointer;transition:.15s}
+.seg button:hover{color:var(--txt);background:rgba(0,0,0,.04)}
+.seg button.sel{background:linear-gradient(180deg,#fff3e0,#ffe8c7);color:var(--amber);box-shadow:inset 0 0 0 1px rgba(217,122,6,.35)}
+
+.sw{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px dashed var(--line)}
+.sw span{font-size:calc(var(--fsz,14px)*12.5/14);color:var(--muted)}
+.track{width:42px;height:22px;flex:none;background:#e4e9ed;border:1px solid var(--line2);border-radius:2px;position:relative;cursor:pointer;transition:.18s}
+.track i{position:absolute;top:2px;left:2px;width:16px;height:16px;background:#94a0a9;border-radius:1px;transition:.18s cubic-bezier(.4,1.6,.5,1)}
+.track.on{background:#d2ecdf;border-color:#7cc29e}
+.track.on i{left:22px;background:var(--green);box-shadow:0 0 8px var(--green)}
+
+/* ============ Terminal ============ */
+.termtools{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line);background:#f4f6f7}
+.tbtn{font-family:var(--mono);font-size:calc(var(--fsz,14px)*10.5/14);letter-spacing:.06em;color:var(--muted);background:#ffffff;
+  border:1px solid var(--line);padding:6px 9px;border-radius:2px;cursor:pointer;transition:.15s;display:flex;align-items:center;gap:5px}
+.tbtn:hover{color:var(--txt);border-color:var(--line2);transform:translateY(-1px)}
+.tbtn.on{color:var(--amber);border-color:rgba(217,122,6,.55);background:#fff3e0}
+.tbtn.danger:hover{color:var(--red);border-color:#5a2c27}
+.tsep{width:1px;height:18px;background:var(--line);margin:0 3px}
+#filter{width:130px;padding:6px 8px;font-size:calc(var(--fsz,14px)*11/14)}
+
+.termbody{position:relative;height:min(60vh,620px);min-height:330px;overflow:auto;background:
+  linear-gradient(180deg,rgba(24,157,100,.03),transparent 40%),#fbfcfd;
+  scrollbar-width:thin;scrollbar-color:#aab6bf transparent}
+.termbody::-webkit-scrollbar{width:9px}
+.termbody::-webkit-scrollbar-thumb{background:#aab6bf;border-radius:0}
+.termbody::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(180deg,rgba(0,0,0,.018) 0 1px,transparent 1px 3px)}
+.line{display:grid;grid-template-columns:88px 26px 1fr auto;gap:10px;align-items:baseline;
+  padding:2.5px 12px 2.5px 10px;border-left:2px solid transparent;font-family:var(--mono);font-size:calc(var(--fsz,14px)*12.5/14);line-height:1.62;
+  animation:lineIn .18s ease-out;transition:background .12s}
+@keyframes lineIn{from{opacity:0;transform:translateX(-4px)}}
+.line:hover{background:rgba(0,0,0,.03)}
+.line .t{color:var(--dim);font-size:calc(var(--fsz,14px)*11/14);font-variant-numeric:tabular-nums}
+.line .d{font-size:calc(var(--fsz,14px)*11/14);text-align:center}
+.line .m{white-space:pre-wrap;word-break:break-all}
+.line .n{font-size:calc(var(--fsz,14px)*10/14);color:var(--dim);opacity:0;transition:.15s}
+.line:hover .n{opacity:1}
+.line.rx{border-left-color:rgba(24,157,100,.55)}.line.rx .d{color:var(--green)}.line.rx .m{color:#12503a}
+.line.tx{border-left-color:rgba(217,122,6,.55)}.line.tx .d{color:var(--amber)}.line.tx .m{color:#7a4a08}
+.line.sys{border-left-color:rgba(13,143,214,.45)}.line.sys .d{color:var(--cyan)}.line.sys .m{color:#33566b;font-style:italic}
+.line.err .m{color:#b52a1b}.line.err{border-left-color:var(--red)}
+.line.hide{display:none}
+mark{background:rgba(255,176,58,.4);color:#8a4d00;border-radius:1px}
+.empty{position:absolute;inset:0;display:grid;place-content:center;text-align:center;color:var(--dim);font-family:var(--mono);font-size:calc(var(--fsz,14px)*11.5/14);letter-spacing:.1em}
+.empty b{display:block;font-family:var(--disp);font-size:calc(var(--fsz,14px)*26/14);color:#c9d2d8;letter-spacing:-.01em;margin-bottom:8px;font-weight:800}
+
+/* ============ Send area ============ */
+#sendBox{min-height:104px;resize:vertical;line-height:1.6;font-size:calc(var(--fsz,14px)*12.5/14)}
+.sendmeta{display:flex;justify-content:space-between;font-family:var(--mono);font-size:calc(var(--fsz,14px)*10/14);color:var(--dim);margin-top:5px}
+.bigsend{width:100%;margin-top:10px;padding:13px;font-family:var(--disp);font-weight:800;font-size:calc(var(--fsz,14px)*16/14);letter-spacing:.04em;
+  background:linear-gradient(180deg,#ffe8c7,#ffe0b0);border:1px solid #e0a35c;color:#a35d00;border-radius:2px;cursor:pointer;transition:.16s}
+.bigsend:hover{border-color:var(--amber);box-shadow:0 0 0 1px rgba(255,176,58,.25),0 0 26px -8px var(--amber);transform:translateY(-1px)}
+.bigsend:active{transform:translateY(0)}
+.bigsend:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.qc{font-family:var(--mono);font-size:calc(var(--fsz,14px)*11/14);color:var(--muted);background:#ffffff;border:1px solid var(--line);
+  padding:6px 9px;border-radius:2px;cursor:pointer;transition:.15s;position:relative}
+.qc:hover{color:var(--amber);border-color:rgba(255,176,58,.4);transform:translateY(-1px)}
+.qc .x{margin-left:6px;color:var(--dim)}
+.qc:hover .x{color:var(--red)}
+.qc.add{border-style:dashed;color:var(--dim)}
+.qc.add:hover{color:var(--txt);border-color:var(--line2)}
+.hist{list-style:none;margin:0;padding:0;max-height:120px;overflow:auto}
+.hist li{font-family:var(--mono);font-size:calc(var(--fsz,14px)*11/14);color:var(--muted);padding:5px 8px;border-left:2px solid var(--line);cursor:pointer;transition:.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hist li:hover{border-left-color:var(--amber);color:var(--txt);background:rgba(0,0,0,.03)}
+.bar{height:4px;background:#eef1f3;border:1px solid var(--line);margin-top:9px;position:relative;overflow:hidden;display:none}
+.bar i{position:absolute;inset:0 auto 0 0;width:0;background:linear-gradient(90deg,var(--cyan),var(--green));transition:width .15s}
+#spark{width:100%;height:62px;display:block;margin-top:4px}
+.legend{display:flex;gap:12px;font-family:var(--mono);font-size:calc(var(--fsz,14px)*9.5/14);color:var(--dim);letter-spacing:.1em;margin-top:6px}
+.legend i{display:inline-block;width:8px;height:8px;margin-right:5px;vertical-align:middle}
+
+/* ============ Toasts / footer ============ */
+#toasts{position:fixed;right:18px;bottom:18px;z-index:80;display:flex;flex-direction:column;gap:8px}
+.toast{font-family:var(--mono);font-size:calc(var(--fsz,14px)*12/14);padding:10px 14px;background:#ffffff;border:1px solid var(--line2);
+  border-left:3px solid var(--cyan);color:var(--txt);box-shadow:0 18px 40px -20px #000;animation:tin .25s ease-out;max-width:340px}
+.toast.ok{border-left-color:var(--green)}.toast.warn{border-left-color:var(--amber)}.toast.err{border-left-color:var(--red)}
+@keyframes tin{from{opacity:0;transform:translateX(20px)}}
+footer{margin-top:22px;display:flex;flex-wrap:wrap;gap:8px 20px;justify-content:space-between;
+  font-family:var(--mono);font-size:calc(var(--fsz,14px)*10/14);letter-spacing:.1em;color:var(--dim);text-transform:uppercase;
+  border-top:1px solid var(--line);padding-top:14px}
+footer kbd{background:#eef1f3;border:1px solid var(--line);padding:2px 6px;border-radius:2px;color:var(--muted);margin-right:4px}
+.warnbox{margin:0 -18px 14px;padding:10px 22px;border:1px solid #6b5322;background:rgba(255,176,58,.06);
+  font-family:var(--mono);font-size:calc(var(--fsz,14px)*11.5/14);color:#f0cf9a;display:none}
+
+@media(max-width:1240px){
+  .shell{grid-template-columns:250px minmax(0,1fr)}
+  .p-send{grid-column:1/-1}
+}
+@media(max-width:860px){
+  .shell{grid-template-columns:1fr}
+  .p-term{order:-1}
+  .counters{margin-left:0;width:100%;order:5}
+  .brand h1{font-size:calc(var(--fsz,14px)*23/14)}
+  .db9{display:none}
+}
+</style>
+</head>
+<body>
+<div class="bg"><div class="glow"></div><div class="grid"></div><div class="noise"></div></div>
+
+<div class="wrap">
+
+  <!-- ===== Front panel ===== -->
+  <header class="bezel">
+    <div class="brand">
+      <h1>SER<span>LINK</span><em>·9</em></h1>
+      <p>Model SL-9200 · USB / UART Bridge · Web Serial</p>
+    </div>
+
+    <div class="lamps">
+      <div class="lamp on" style="--c:#4ade9b"><i></i><span>PWR</span></div>
+      <div class="lamp" id="lRx" style="--c:#4ade9b"><i></i><span>RX</span></div>
+      <div class="lamp" id="lTx" style="--c:#ffb03a"><i></i><span>TX</span></div>
+      <div class="lamp" id="lDtr" style="--c:#5cc8ff"><i></i><span>DTR</span></div>
+      <div class="lamp" id="lRts" style="--c:#5cc8ff"><i></i><span>RTS</span></div>
+      <div class="lamp" id="lCts" style="--c:#ff5f52"><i></i><span>CTS</span></div>
+    </div>
+
+    <div class="counters">
+      <div class="ct" id="rxC"><b>0</b><span>RX BYTES</span></div>
+      <div class="ct" id="txC"><b>0</b><span>TX BYTES</span></div>
+      <div class="ct" id="rtC"><b>0</b><span>B / SEC</span></div>
+    </div>
+
+    <svg class="db9" viewBox="0 0 112 66" aria-label="DB9">
+      <rect class="shell" x="3" y="3" width="106" height="60" rx="9"/>
+      <circle class="scr" cx="13" cy="33" r="4.4"/><circle class="scr" cx="99" cy="33" r="4.4"/>
+      <path class="ds" d="M26 15 H86 L78 51 H34 Z"/>
+      <g id="pins">
+        <circle class="pin" cx="34" cy="25" r="3"/><circle class="pin" cx="45" cy="25" r="3"/>
+        <circle class="pin" cx="56" cy="25" r="3"/><circle class="pin" cx="67" cy="25" r="3"/>
+        <circle class="pin" cx="78" cy="25" r="3"/>
+        <circle class="pin" cx="43" cy="41" r="3"/><circle class="pin" cx="54" cy="41" r="3"/>
+        <circle class="pin" cx="65" cy="41" r="3"/><circle class="pin" cx="76" cy="41" r="3"/>
+      </g>
+    </svg>
+
+    <button class="btn main" id="btnConnect">Connect</button>
+  </header>
+
+  <div class="warnbox" id="warnbox"></div>
+
+  <!-- ===== Status bar ===== -->
+  <div class="statusbar">
+    <div class="chip state idle" id="stState"><span class="dot"></span><b>Disconnected</b></div>
+    <div class="chip" id="stPort">Port <b>—</b></div>
+    <div class="chip" id="stCfg">115200 8N1 No flow control</div>
+    <div class="chip" id="stUp">Uptime 00:00:00</div>
+    <div class="chip" id="stLines">Lines 0</div>
+  </div>
+
+  <!-- ===== Main ===== -->
+  <main class="shell">
+
+    <!-- Config -->
+    <section class="panel">
+      <div class="phead"><span class="idx">01</span><h2>Link Config</h2><span class="sp">LINK</span></div>
+      <div class="pbody">
+        <div class="field">
+          <label class="lbl">Serial Port</label>
+          <div style="display:flex;gap:7px">
+            <select id="portSel" style="flex:1"><option value="">— Browse available ports… —</option></select>
+            <button class="tbtn" id="btnRefresh" title="Rescan">↻</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="lbl">Baud Rate</label>
+          <select id="baud">
+            <option>1200</option><option>2400</option><option>4800</option><option>9600</option>
+            <option>19200</option><option>38400</option><option>57600</option>
+            <option selected>115200</option><option>230400</option><option>460800</option>
+            <option>921600</option><option>1000000</option><option>2000000</option><option value="custom">Custom…</option>
+          </select>
+          <input type="number" id="baudCustom" placeholder="Custom baud rate, e.g. 38400" style="margin-top:7px;display:none">
+        </div>
+
+        <div class="row3 field">
+          <div><label class="lbl">Data Bits</label>
+            <select id="dbits"><option>7</option><option selected>8</option></select></div>
+          <div><label class="lbl">Stop Bits</label>
+            <select id="sbits"><option selected>1</option><option>2</option></select></div>
+          <div><label class="lbl">Parity</label>
+            <select id="parity"><option value="none" selected>None</option><option value="odd">Odd</option><option value="even">Even</option></select></div>
+        </div>
+
+        <div class="field">
+          <label class="lbl">Flow Control</label>
+          <div class="seg" id="segFlow">
+            <button data-v="none" class="sel">None</button>
+            <button data-v="hardware">Hardware RTS/CTS</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="lbl">Control Signals</label>
+          <div class="sw"><span>DTR · Data Terminal Ready</span><div class="track on" id="swDtr"><i></i></div></div>
+          <div class="sw"><span>RTS · Request To Send</span><div class="track on" id="swRts"><i></i></div></div>
+          <div style="display:flex;gap:7px;margin-top:10px">
+            <button class="tbtn" id="btnBreak" style="flex:1">Send BREAK</button>
+            <button class="tbtn" id="btnReset" style="flex:1">DTR Reset Pulse</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="lbl">UI Font (whole page)</label>
+          <div class="row2" style="grid-template-columns:1fr 78px;gap:7px">
+            <select id="fontSel" title="Select font">
+              <option value='"IBM Plex Mono",ui-monospace,monospace' selected>IBM Plex Mono (default)</option>
+              <option value='ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace'>System Monospace</option>
+              <option value='Consolas,"Courier New",monospace'>Consolas</option>
+              <option value='Menlo,Monaco,Consolas,monospace'>Menlo</option>
+              <option value='"Cascadia Mono","Cascadia Code",Consolas,monospace'>Cascadia Mono</option>
+              <option value='"JetBrains Mono","Fira Code",monospace'>JetBrains / Fira Code</option>
+              <option value='"Sarasa Mono SC",monospace'>Sarasa Mono SC</option>
+              <option value='"Noto Sans Mono CJK SC","Noto Mono",monospace'>Noto Sans Mono CJK</option>
+              <option value='"SimSun","NSimSun",monospace'>SimSun</option>
+              <option value='"Microsoft YaHei",system-ui,sans-serif'>Microsoft YaHei (proportional)</option>
+              <option value="__browser__">Browser default font (no override)</option>
+              <option value="custom">Custom font name…</option>
+            </select>
+            <select id="fontSz" title="Global font size (scales the whole page)">
+              <option>11</option><option>12</option><option>13</option>
+              <option value="14" selected>14</option><option>15</option><option>16</option>
+              <option>17</option><option>18</option><option>20</option><option>22</option>
+              <option>24</option><option>28</option>
+            </select>
+          </div>
+          <input type="text" id="fontCustom" placeholder="Custom font name, e.g. Courier New" style="margin-top:7px;display:none">
+          <div style="display:flex;gap:7px;align-items:center;margin-top:9px">
+            <span style="font-family:var(--mono);font-size:calc(var(--fsz,14px)*9.5/14);color:var(--dim);letter-spacing:.1em;flex:1">Font &amp; size apply to the whole page · saved in this browser</span>
+            <button class="tbtn" id="btnResetPrefs" title="Clear saved settings and restore factory defaults">Reset</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="lbl">Live Throughput (60s)</label>
+          <canvas id="spark"></canvas>
+          <div class="legend"><span><i style="background:#4ade9b"></i>RX</span><span><i style="background:#ffb03a"></i>TX</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Receive -->
+    <section class="panel p-term">
+      <div class="phead"><span class="idx">02</span><h2>Data Terminal</h2><span class="sp" id="encTag">ASCII · line-buffered</span></div>
+      <div class="termtools">
+        <button class="tbtn" id="tHex" title="Ctrl+H">HEX View</button>
+        <button class="tbtn on" id="tTs">Timestamps</button>
+        <button class="tbtn on" id="tTx">Show TX</button>
+        <button class="tbtn on" id="tScroll">Autoscroll</button>
+        <button class="tbtn" id="tPause">Pause</button>
+        <span class="tsep"></span>
+        <input type="text" id="filter" placeholder="Filter / highlight…">
+        <span class="tsep"></span>
+        <button class="tbtn" id="tSave">Save Log</button>
+        <button class="tbtn danger" id="tClear" title="Ctrl+K">Clear</button>
+      </div>
+      <div class="termbody" id="log">
+        <div class="empty" id="empty"><b>NO CARRIER</b>Select a port and click "Connect" to start</div>
+      </div>
+    </section>
+
+    <!-- Send -->
+    <section class="panel p-send">
+      <div class="phead"><span class="idx">03</span><h2>Transmit</h2><span class="sp" id="byteTag">0 B</span></div>
+      <div class="pbody">
+        <textarea id="sendBox" placeholder="Enter data to send…&#10;Ctrl+Enter to send"></textarea>
+        <div class="sendmeta"><span>HEX mode: separate bytes with spaces</span><span id="lenTag">0 chars / 0 bytes</span></div>
+
+        <div class="row2" style="margin-top:11px">
+          <div><label class="lbl">Line Ending</label>
+            <select id="eol">
+              <option value="">None</option>
+              <option value="\n">\n (LF)</option>
+              <option value="\r">\r (CR)</option>
+              <option value="\r\n" selected>\r\n (CRLF)</option>
+            </select></div>
+          <div><label class="lbl">Encoding</label>
+            <select id="enc"><option value="ascii" selected>ASCII</option><option value="utf-8">UTF-8</option><option value="iso-8859-1">ISO-8859-1</option></select></div>
+        </div>
+
+        <div class="sw" style="border-top:1px dashed var(--line);margin-top:4px"><span>HEX Send</span><div class="track" id="swHex"><i></i></div></div>
+
+        <button class="bigsend" id="btnSend">SEND</button>
+
+        <div class="field" style="margin-top:13px">
+          <label class="lbl">Auto Send Interval</label>
+          <div style="display:flex;gap:7px;align-items:center">
+            <input type="number" id="interval" value="1000" min="50" step="50" style="width:92px">
+            <span style="font-family:var(--mono);font-size:calc(var(--fsz,14px)*11/14);color:var(--muted)">ms</span>
+            <button class="tbtn" id="btnAuto" style="flex:1">Start Loop</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="lbl">Quick Commands</label>
+          <div class="chips" id="quick"></div>
+        </div>
+
+        <div class="field">
+          <label class="lbl">Send History</label>
+          <ul class="hist" id="hist"></ul>
+        </div>
+
+        <div class="field">
+          <label class="lbl">File Transfer</label>
+          <button class="tbtn" id="btnFile" style="width:100%">Pick a file and send as raw bytes</button>
+          <input type="file" id="fileInput" hidden>
+          <div class="bar" id="fileBar"><i></i></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div>Requires HTTPS / localhost + Chrome · Edge · Opera (Web Serial API)</div>
+    <div><kbd>Ctrl</kbd><kbd>Enter</kbd>Send <kbd>Ctrl</kbd><kbd>D</kbd>Connect <kbd>Ctrl</kbd><kbd>H</kbd>HEX <kbd>Ctrl</kbd><kbd>K</kbd>Clear</div>
+    <div>SERLINK-9 · FIRMWARE 2.4.1</div>
+  </footer>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+/* =========================================================
+   SERLINK-9  Web Serial Terminal
+   ========================================================= */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+
+const S = {
+  port:null, reader:null, writer:null, readClosed:null,
+  connected:false, demo:false, simTimer:null, simEcho:null,
+  rx:0, tx:0, entries:[], paused:false,
+  hex:false, ts:true, showTx:true, autoscroll:true, filter:'',
+  history:[], hIdx:-1, autoTimer:null, t0:0, upTimer:null,
+  flow:'none', dtr:true, rts:true, linkParams:null,
+  buckets:{rx:new Array(60).fill(0), tx:new Array(60).fill(0), cur:{rx:0,tx:0}},
+  dec:null, encLabel:'ascii'
+};
+const MAX_LINES = 1500;
+
+/* ---------- Utilities ---------- */
+const pad = (n,l=2)=>String(n).padStart(l,'0');
+function stamp(d=new Date()){
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(),3)}`;
+}
+function esc(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function toHex(bytes){let o='';for(const b of bytes)o+=b.toString(16).toUpperCase().padStart(2,'0')+' ';return o.trim();}
+function fmtN(n){return n.toLocaleString('en-US');}
+function toast(msg,type=''){
+  const el=document.createElement('div'); el.className='toast '+type; el.textContent=msg;
+  $('#toasts').appendChild(el);
+  setTimeout(()=>{el.style.transition='.3s';el.style.opacity='0';el.style.transform='translateX(20px)';},2600);
+  setTimeout(()=>el.remove(),3000);
+}
+function lamp(id,on){ $('#'+id).classList.toggle('on',!!on); }
+function flashPins(mode){
+  const pins=$$('#pins .pin'); const pick=[...pins].sort(()=>Math.random()-.5).slice(0,2+Math.floor(Math.random()*3));
+  pick.forEach(p=>{p.classList.add(mode); setTimeout(()=>p.classList.remove(mode),130);});
+}
+function bump(id){const b=$('#'+id+' b'); b.textContent=fmtN(id==='rxC'?S.rx:S.tx); b.classList.add('bump'); setTimeout(()=>b.classList.remove('bump'),120);}
+
+/* ---------- Log ---------- */
+function pushLog(dir, text, bytes){
+  if(S.paused && dir!=='sys') return;
+  const e={dir, text, bytes, time:stamp()};
+  S.entries.push(e);
+  if(S.entries.length>MAX_LINES) S.entries.splice(0,S.entries.length-MAX_LINES);
+  const node=renderLine(e);
+  $('#log .empty')?.remove();
+  $('#log').appendChild(node);
+  const box=$('#log');
+  if(box.children.length>MAX_LINES) [...box.children].slice(0,300).forEach(n=>n.remove());
+  if(S.autoscroll) box.scrollTop=box.scrollHeight;
+  $('#stLines').textContent='Lines '+box.children.length;
+}
+function renderLine(e){
+  const d=document.createElement('div');
+  d.className='line '+e.dir; d._e=e;
+  const mark={rx:'◄',tx:'►',sys:'◆',err:'✕'}[e.dir];
+  let body;
+  if(S.hex && e.bytes) body=toHex(e.bytes);
+  else body=esc(e.text);
+  if(S.filter && body.toLowerCase().includes(S.filter.toLowerCase())){
+    const re=new RegExp('('+S.filter.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi');
+    body=body.replace(re,'<mark>$1</mark>');
+  }
+  const hidden = S.filter && !e.text.toLowerCase().includes(S.filter.toLowerCase());
+  if(hidden) d.classList.add('hide');
+  d.innerHTML = `${S.ts?`<span class="t">${e.time}</span>`:'<span class="t"></span>'}
+                 <span class="d">${mark}</span><span class="m">${body}</span>
+                 <span class="n">${e.bytes?e.bytes.length+' B':''}</span>`;
+  return d;
+}
+function rerender(){
+  const box=$('#log'); box.innerHTML='';
+  S.entries.slice(-900).forEach(e=>box.appendChild(renderLine(e)));
+  if(!S.entries.length) box.innerHTML='<div class="empty" id="empty"><b>NO CARRIER</b>Select a port and click "Connect" to start</div>';
+  if(S.autoscroll) box.scrollTop=box.scrollHeight;
+}
+
+/* ---------- Counters / sparkline ---------- */
+function addTraffic(dir,n){
+  if(dir==='rx'){S.rx+=n; bump('rxC');} else {S.tx+=n; bump('txC');}
+  S.buckets.cur[dir]+=n;
+}
+setInterval(()=>{
+  S.buckets.rx.push(S.buckets.cur.rx); S.buckets.rx.shift();
+  S.buckets.tx.push(S.buckets.cur.tx); S.buckets.tx.shift();
+  const rate=S.buckets.cur.rx+S.buckets.cur.tx;
+  S.buckets.cur={rx:0,tx:0};
+  const rb=$('#rtC b'); rb.textContent=fmtN(rate); rb.classList.add('bump'); setTimeout(()=>rb.classList.remove('bump'),120);
+  drawSpark();
+},1000);
+
+const cv=$('#spark'), ctx=cv.getContext('2d');
+function drawSpark(){
+  const w=cv.clientWidth, h=62, dpr=devicePixelRatio||1;
+  cv.width=w*dpr; cv.height=h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  const mid=h/2;
+  ctx.strokeStyle='#e0e5ea'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,mid+.5); ctx.lineTo(w,mid+.5); ctx.stroke();
+  for(let i=0;i<6;i++){const y=mid-(mid-4)*i/5; ctx.globalAlpha=.5; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.moveTo(0,h-y); ctx.lineTo(w,h-y); ctx.stroke();}
+  ctx.globalAlpha=1;
+  const max=Math.max(16,...S.buckets.rx,...S.buckets.tx);
+  const bw=w/60;
+  S.buckets.rx.forEach((v,i)=>{const hh=(v/max)*(mid-4); if(!v)return;
+    ctx.fillStyle='rgba(74,222,155,.75)'; ctx.fillRect(i*bw+1,mid-hh,bw-2,hh);});
+  S.buckets.tx.forEach((v,i)=>{const hh=(v/max)*(mid-4); if(!v)return;
+    ctx.fillStyle='rgba(255,176,58,.7)'; ctx.fillRect(i*bw+1,mid,bw-2,hh);});
+}
+addEventListener('resize',drawSpark); drawSpark();
+
+/* ---------- State ---------- */
+function setState(state,portInfo){
+  const c=$('#stState');
+  const map={idle:['Disconnected','idle'],busy:['Connecting…',''],on:['Connected',''],err:['Connect error','err']};
+  const [txt,cls]=map[state];
+  c.className='chip state '+cls; c.innerHTML=`<span class="dot"></span><b>${txt}</b>`;
+  if(portInfo!==undefined) $('#stPort').innerHTML='Port <b>'+portInfo+'</b>';
+  const b=$('#btnConnect');
+  b.textContent = state==='on' ? 'Disconnect' : (state==='busy'?'Connecting':'Connect');
+  b.classList.toggle('live',state==='on'); b.classList.toggle('busy',state==='busy');
+  $('#btnSend').disabled = !(S.connected||S.demo);
+}
+function updCfgTag(){
+  const b = $('#baudCustom').value || $('#baud').value;
+  $('#stCfg').textContent = `${b} ${$('#dbits').value}${$('#parity').value[0].toUpperCase()}${$('#sbits').value} ${S.flow==='hardware'?'HW flow control':'No flow control'}`;
+}
+function startUp(){
+  S.t0=Date.now(); clearInterval(S.upTimer);
+  S.upTimer=setInterval(()=>{
+    const s=Math.floor((Date.now()-S.t0)/1000);
+    $('#stUp').textContent=`Uptime ${pad(Math.floor(s/3600))}:${pad(Math.floor(s/60)%60)}:${pad(s%60)}`;
+  },1000);
+}
+
+/* ---------- Serial port ---------- */
+const supported = 'serial' in navigator;
+async function listPorts(){
+  const sel=$('#portSel'); const prev=sel.value;
+  sel.innerHTML='<option value="">— Browse available ports… —</option>';
+  const sim=document.createElement('option'); sim.value='SIM'; sim.textContent='SIM-0 · Simulated device (demo)'; sel.appendChild(sim);
+  if(supported){
+    try{
+      const ports=await navigator.serial.getPorts();
+      ports.forEach((p,i)=>{
+        const info=p.getInfo();
+        const label = info.usbVendorId ? `USB ${info.usbVendorId.toString(16).padStart(4,'0')}:${info.usbProductId.toString(16).padStart(4,'0')} · Port #${i+1}` : `Authorized port #${i+1}`;
+        const o=document.createElement('option'); o.value='P'+i; o.textContent=label; o._port=p; sel.appendChild(o);
+      });
+    }catch(e){}
+  }
+  if(prev) sel.value=prev;
+}
+/* ---------- Link parameters: changes apply on the fly (auto quick disconnect→reconnect, no manual step) ---------- */
+function linkParams(){
+  const customRaw=$('#baudCustom').value.trim();
+  const raw = customRaw!=='' ? customRaw : $('#baud').value;
+  const b=parseInt(raw,10);
+  if(!Number.isFinite(b)||b<=0) return null;
+  return { baudRate:b, dataBits:+$('#dbits').value, stopBits:+$('#sbits').value,
+           parity:$('#parity').value, flowControl:S.flow };
+}
+function linkLabel(p){
+  return `${p.baudRate} ${p.dataBits}${p.parity[0].toUpperCase()}${p.stopBits} ${p.flowControl==='hardware'?'HW flow control':'No flow control'}`;
+}
+async function teardownStream(){
+  if(!S.connected) return;
+  S.connected=false;
+  try{ await S.reader.cancel(); }catch(e){}
+  try{ await S.readClosed; }catch(e){}
+  try{ await S.writer.close(); }catch(e){}
+  try{ await S.port.close(); }catch(e){}
+  S.reader=S.writer=S.readClosed=null;
+}
+async function setupStream(port,params){
+  await port.open(params);
+  S.port=port; S.connected=true;
+  S.dec=makeDecoder();
+  S.linkParams={...params};
+  try{ await port.setSignals({dataTerminalReady:S.dtr, requestToSend:S.rts}); }catch(e){}
+  lamp('lDtr',S.dtr); lamp('lRts',S.rts); lamp('lCts',S.flow==='hardware');
+  S.reader=port.readable.getReader();
+  S.writer=port.writable.getWriter();
+  S.readClosed=readLoop();
+}
+let linkBusy=false, linkSoonTimer=null;
+function applyLinkSoon(){ clearTimeout(linkSoonTimer); linkSoonTimer=setTimeout(applyLink,450); }
+async function applyLink(){
+  if(!S.connected || S.demo || linkBusy || !S.port) return;
+  const next=linkParams(); if(!next) return;
+  const cur=S.linkParams||{};
+  if(next.baudRate===cur.baudRate && next.dataBits===cur.dataBits && next.stopBits===cur.stopBits
+     && next.parity===cur.parity && next.flowControl===cur.flowControl) return;
+  linkBusy=true; setState('busy');
+  const port=S.port;
+  try{
+    await teardownStream();
+    await setupStream(port,next);
+    setState('on', $('#portSel').selectedOptions[0].textContent);
+    const note=cur.baudRate!==next.baudRate?` (baud ${cur.baudRate} → ${next.baudRate})`:'';
+    pushLog('sys',`Link parameters applied · ${linkLabel(next)}${note} · reconnected`,null);
+    toast('Link parameters applied','ok');
+  }catch(err){
+    setState('err');
+    pushLog('err','Failed to apply link parameters: '+(err.message||err)+' · disconnect and reconnect manually',null);
+    toast('Failed to apply parameters, please reconnect','err');
+  }finally{ linkBusy=false; }
+}
+
+async function connect(){
+  if(S.connected||S.demo){ await disconnect(); return; }
+  if(linkBusy) return;
+  const sel=$('#portSel');
+  setState('busy');
+  try{
+    if(sel.value==='SIM'){ return connectSim(); }
+    if(!supported) throw new Error('Web Serial API is not supported in this browser');
+    let port=null;
+    if(sel.value && sel.value.startsWith('P')) port=sel.options[sel.selectedIndex]._port;
+    if(!port){
+      port=await navigator.serial.requestPort();
+      await listPorts();
+      const idx=[...$('#portSel').options].findIndex(o=>o._port===port);
+      if(idx>0) $('#portSel').selectedIndex=idx;
+    }
+    const p=linkParams();
+    if(!p) throw new Error('Invalid baud rate');
+    await setupStream(port,p);
+    setState('on', $('#portSel').selectedOptions[0].textContent);
+    startUp();
+    pushLog('sys',`Connected · ${linkLabel(p)}`,null);
+    toast('Serial port connected · '+p.baudRate+' bps','ok');
+  }catch(err){
+    if(err && err.name==='NotFoundError'){ setState(S.connected?'on':'idle'); return; }
+    setState('err'); pushLog('err','Connect failed: '+(err.message||err),null); toast('Connect failed: '+(err.message||err),'err');
+  }
+}
+/* Line buffering: only break a line on CR (\r) or LF (\n), accumulating across chunks */
+let lineBuf='';
+let lineTimer=null;
+function lineFlush(force=false){
+  while(lineBuf.length){
+    const idxCR=lineBuf.indexOf('\r'), idxLF=lineBuf.indexOf('\n');
+    let cut=-1;
+    if(idxCR!==-1 && idxLF!==-1) cut=Math.min(idxCR,idxLF);
+    else if(idxCR!==-1) cut=idxCR; else cut=idxLF;
+    if(cut===-1) break;
+    const line=lineBuf.slice(0,cut);
+    let rest=lineBuf.slice(cut);
+    /* Skip consecutive CR/LF (CRLF, multiple \r, etc.); empty lines produce no log entry */
+    while(rest.length && (rest[0]==='\r' || rest[0]==='\n')) rest=rest.slice(1);
+    lineBuf=rest;
+    if(line) pushLog('rx',line,bytesOf(line));
+    if(!lineBuf.length) break;
+  }
+}
+function lineFlushTail(){
+  clearTimeout(lineTimer); lineTimer=null;
+  if(!lineBuf) return;
+  const line=lineBuf; lineBuf='';
+  pushLog('rx',line,bytesOf(line));
+}
+async function readLoop(){
+  try{
+    while(true){
+      const {value,done}=await S.reader.read();
+      if(done){ break; }
+      if(value){
+        addTraffic('rx',value.length); lamp('lRx',true); flashPins('rx');
+        setTimeout(()=>lamp('lRx',false),90);
+        lineBuf+=S.dec.decode(value,{stream:true});
+        lineFlush();
+        /* Leftover data without a newline: output only after 800ms with no further data */
+        clearTimeout(lineTimer);
+        lineTimer=setTimeout(lineFlushTail,800);
+      }
+    }
+  }catch(e){ if(S.connected) pushLog('err','Read interrupted: '+e.message,null); }
+  finally{ lineFlushTail(); try{S.reader.releaseLock();}catch(e){} }
+}
+async function disconnect(){
+  clearInterval(S.upTimer); clearInterval(S.autoTimer); S.autoTimer=null; $('#btnAuto').classList.remove('on'); $('#btnAuto').textContent='Start Loop';
+  if(S.demo){ clearInterval(S.simTimer); clearTimeout(S.simEcho); S.demo=false; pushLog('sys','Simulated device disconnected',null); }
+  if(S.connected){
+    await teardownStream();
+    S.port=null; S.linkParams=null;
+    pushLog('sys','Serial port disconnected',null); toast('Serial port disconnected','warn');
+  }
+  lamp('lDtr',false);lamp('lRts',false);lamp('lCts',false);
+  setState('idle','—');
+}
+
+/* ---------- Simulated device ---------- */
+function connectSim(){
+  S.demo=true; S.connected=false;
+  setState('on','SIM-0 Simulated'); startUp();
+  lamp('lDtr',true);lamp('lRts',true);lamp('lCts',true);
+  pushLog('sys','Connected to simulated device (usable for demo when Web Serial is unavailable)',null);
+  toast('Simulated device started','ok');
+  let n=0;
+  const t=()=>{
+    n++;
+    const up=(n*0.7).toFixed(1);
+    const kind=n%4;
+    let line;
+    if(kind===0) line=`[INFO] uptime=${up}s heap=${118000+Math.floor(Math.random()*30000)} rssi=-${45+Math.floor(Math.random()*30)}dBm`;
+    else if(kind===1) line=`[SENSOR] temp=${(24+Math.random()*4).toFixed(1)}C hum=${(38+Math.random()*10).toFixed(1)}% press=${(1008+Math.random()*8).toFixed(1)}hPa`;
+    else if(kind===2){ const b=new Uint8Array([0x55,0xAA,Math.floor(Math.random()*256),Math.floor(Math.random()*256),0x0D]); line=toHex(b); pushLog('rx',line,b); return; }
+    else line=`[NET] mqtt publish ok  msgid=${1000+n}  ack=${(Math.random()*40+8).toFixed(0)}ms`;
+    pushLog('rx',line,new TextEncoder().encode(line));
+  };
+  const b=new TextEncoder().encode('\x55\xAA\x01\x2F\x0D'); pushLog('rx',toHex(b),b);
+  S.simTimer=setInterval(t,900);
+}
+
+/* ---------- Send ---------- */
+/* Encoding: ASCII is strict 7-bit (non-ASCII characters replaced with ?); TextEncoder itself only supports UTF-8 */
+function encName(){ return ($('#enc') ? $('#enc').value : S.encLabel) || 'ascii'; }
+function isAscii(label){ return label==='ascii' || label==='us-ascii'; }
+function isLatin(label){ return label==='iso-8859-1' || label==='latin-1' || label==='windows-1252'; }
+function encodeText(str,warn=false){
+  const label=(S.encLabel||'ascii').toLowerCase();
+  if(isAscii(label)){
+    const out=new Uint8Array(str.length); let bad=0;
+    for(let i=0;i<str.length;i++){
+      const c=str.charCodeAt(i);
+      if(c<128) out[i]=c; else { out[i]=0x3F; bad++; }
+    }
+    if(bad && warn) toast(`ASCII encoding: ${bad} non-ASCII character(s) replaced with ?`,'warn');
+    return out;
+  }
+  if(isLatin(label)){
+    const out=new Uint8Array(str.length); let bad=0;
+    for(let i=0;i<str.length;i++){
+      const c=str.charCodeAt(i);
+      if(c<256) out[i]=c; else { out[i]=0x3F; bad++; }
+    }
+    if(bad && warn) toast(`ISO-8859-1 encoding: ${bad} character(s) out of single-byte range replaced with ?`,'warn');
+    return out;
+  }
+  return new TextEncoder().encode(str);
+}
+function bytesOf(t){ return encodeText(t,false); }
+function makeDecoder(){
+  const label=(S.encLabel||'ascii').toLowerCase();
+  const name = isAscii(label) ? 'windows-1252' : (isLatin(label) ? 'windows-1252' : label);
+  try{ return new TextDecoder(name,{fatal:false,ignoreBOM:true}); }
+  catch(e){ return new TextDecoder('utf-8',{fatal:false,ignoreBOM:true}); }
+}
+function updEncTag(){
+  const l=encName().toUpperCase();
+  $('#encTag').textContent = (isAscii(l.toLowerCase())?'ASCII (7-bit)':l) + ' · line-buffered';
+}
+function parseHex(str){
+  const clean=str.replace(/0x/gi,' ').replace(/[^0-9a-fA-F]/g,'');
+  if(!clean) return null;
+  if(clean.length%2) throw new Error('HEX byte count must be even');
+  const out=new Uint8Array(clean.length/2);
+  for(let i=0;i<out.length;i++) out[i]=parseInt(clean.substr(i*2,2),16);
+  return out;
+}
+async function writeBytes(bytes,label){
+  addTraffic('tx',bytes.length); lamp('lTx',true); flashPins('tx'); setTimeout(()=>lamp('lTx',false),90);
+  if(S.demo){
+    pushLog('tx',label||toHex(bytes),bytes);
+    clearTimeout(S.simEcho);
+    S.simEcho=setTimeout(()=>{
+      const txt=new TextDecoder().decode(bytes).trim();
+      if(txt) pushLog('rx','echo › '+txt,new TextEncoder().encode(txt));
+    },220);
+    return true;
+  }
+  if(!S.writer){ toast('Serial port not connected','warn'); return false; }
+  try{ await S.writer.write(bytes); pushLog('tx',label||toHex(bytes),bytes); return true; }
+  catch(e){ pushLog('err','Send failed: '+e.message,null); toast('Send failed','err'); return false; }
+}
+async function doSend(){
+  if(!(S.connected||S.demo)) return toast('Connect to a serial port first','warn');
+  const raw=$('#sendBox').value;
+  if($('#swHex').classList.contains('on')){
+    let b; try{ b=parseHex(raw); }catch(e){ return toast(e.message,'err'); }
+    if(!b) return toast('No HEX data to send','warn');
+    await writeBytes(b, toHex(b));
+  }else{
+    if(!raw) return;
+    const eol=$('#eol').value.replace('\\r','\r').replace('\\n','\n');
+    const bytes=encodeText(raw+eol,true);
+    const tag = eol ? ({'\r':'⏎CR','\n':'⏎LF','\r\n':'⏎CRLF'}[eol] || '⏎') : '';
+    await writeBytes(bytes, raw+tag);
+  }
+  addHistory(raw);
+}
+function addHistory(t){
+  t=t.trim(); if(!t) return;
+  S.history=S.history.filter(x=>x!==t); S.history.unshift(t); if(S.history.length>25) S.history.pop();
+  S.hIdx=-1; renderHist();
+}
+function renderHist(){
+  $('#hist').innerHTML = S.history.length ? S.history.map((h,i)=>`<li data-i="${i}" title="${esc(h)}">${esc(h.replace(/\n/g,'↵ '))}</li>`).join('') : '<li style="cursor:default;color:#3e4850"> No history yet</li>';
+}
+$('#hist').addEventListener('click',e=>{ const li=e.target.closest('li[data-i]'); if(!li)return;
+  $('#sendBox').value=S.history[+li.dataset.i]; $('#sendBox').focus(); });
+
+/* ---------- Quick commands ---------- */
+let quick = JSON.parse(localStorage.getItem('sl9_quick')||'null') || ['AT','AT&V','AT+TL_MARGIN=8','AT+GAIN=13','AT+PROTOCOL_OUT=MAVLINK2','AT+PROTOCOL_OUT=RAW','AT+BAUD=115200','AT+RST','AT+RSTS'];
+function renderQuick(){
+  $('#quick').innerHTML = quick.map((q,i)=>`<div class="qc" data-i="${i}">${esc(q.replace(/\x55\xAA\x01/,'55 AA 01'))}<span class="x">×</span></div>`).join('')
+    + '<div class="qc add" id="qcAdd">+ Add</div>';
+  localStorage.setItem('sl9_quick',JSON.stringify(quick));
+}
+$('#quick').addEventListener('click',async e=>{
+  const el=e.target.closest('.qc'); if(!el) return;
+  if(el.id==='qcAdd'){
+    const v=prompt('New quick command:'); if(v){quick.push(v); renderQuick(); toast('Added','ok');} return;
+  }
+  if(e.target.classList.contains('x')){ quick.splice(+el.dataset.i,1); renderQuick(); return; }
+  const cmd=quick[+el.dataset.i];
+  $('#sendBox').value=cmd; await doSend();
+});
+renderQuick(); renderHist();
+
+/* ---------- Browser preferences (persisted via localStorage) ---------- */
+const PREF_KEY='sl9_prefs';
+const PREF_SELECTS=['baud','baudCustom','dbits','sbits','parity','eol','enc','fontSel','fontSz','fontCustom','interval'];
+const PREF_TOGGLES=['swHex','swDtr','swRts'];
+const PREF_TOOLS=[['tHex','hex'],['tTs','ts'],['tTx','showTx'],['tScroll','autoscroll']];
+let prefTimer=null;
+function savePrefs(){
+  const p={};
+  PREF_SELECTS.forEach(id=>{ const el=$('#'+id); if(el) p[id]=el.value; });
+  PREF_TOGGLES.forEach(id=>{ const el=$('#'+id); if(el) p[id]=el.classList.contains('on'); });
+  PREF_TOOLS.forEach(([id,key])=>{ p[key]=S[key]; });
+  p.flow=S.flow;
+  p.draft=$('#sendBox').value;
+  try{ localStorage.setItem(PREF_KEY, JSON.stringify(p)); }catch(e){}
+}
+function savePrefsSoon(){ clearTimeout(prefTimer); prefTimer=setTimeout(savePrefs,200); }
+function loadPrefs(){
+  let p=null; try{ p=JSON.parse(localStorage.getItem(PREF_KEY)||'null'); }catch(e){}
+  return (p && typeof p==='object') ? p : null;
+}
+function applyPrefs(p){
+  if(!p) return;
+  PREF_SELECTS.forEach(id=>{ const el=$('#'+id); if(el && typeof p[id]==='string') el.value=p[id]; });
+  if($('#baud').value==='custom') $('#baudCustom').style.display='block';
+  if(!$('#fontSz').value) $('#fontSz').value='14';   /* legacy saved font size (e.g. 12.5) no longer valid, fall back to 14 */
+  PREF_TOGGLES.forEach(id=>{ const el=$('#'+id); if(el && typeof p[id]==='boolean') el.classList.toggle('on',p[id]); });
+  PREF_TOOLS.forEach(([id,key])=>{ if(typeof p[key]==='boolean'){ S[key]=p[key]; const el=$('#'+id); if(el) el.classList.toggle('on',S[key]); } });
+  if(p.flow==='none'||p.flow==='hardware'){ S.flow=p.flow;
+    $$('#segFlow button').forEach(b=>b.classList.toggle('sel',b.dataset.v===S.flow)); }
+  S.dtr=$('#swDtr').classList.contains('on'); S.rts=$('#swRts').classList.contains('on');
+  if(typeof p.draft==='string') $('#sendBox').value=p.draft;
+  S.encLabel=encName();
+}
+function applyFont(){
+  const sel=$('#fontSel'), root=document.documentElement;
+  const browserDefault = sel.value==='__browser__';
+  root.classList.toggle('browserfont', browserDefault);
+  const fam = sel.value==='custom' ? ($('#fontCustom').value.trim()||'ui-monospace,monospace') : sel.value;
+  if(browserDefault){ ['--mono','--sans','--disp'].forEach(k=>root.style.removeProperty(k)); }
+  else{ ['--mono','--sans','--disp'].forEach(k=>root.style.setProperty(k,fam)); }
+  root.style.setProperty('--fsz',($('#fontSz').value||'14')+'px');
+}
+
+/* ---------- Event bindings ---------- */
+$('#btnConnect').onclick=connect;
+$('#btnRefresh').onclick=async()=>{await listPorts(); toast('Ports rescanned');};
+$('#btnSend').onclick=doSend;
+
+/* Baud/data/stop/parity changes: debounce 450ms, then auto-reconnect to apply (no manual disconnect needed) */
+$('#baud').onchange=()=>{ if($('#baud').value==='custom'){$('#baudCustom').style.display='block';$('#baudCustom').focus();} updCfgTag(); applyLinkSoon(); };
+$('#baudCustom').oninput=updCfgTag;
+$('#baudCustom').onchange=applyLinkSoon;
+['dbits','sbits','parity'].forEach(id=>$('#'+id).onchange=()=>{updCfgTag(); applyLinkSoon();});
+$('#segFlow').onclick=e=>{const b=e.target.closest('button'); if(!b)return;
+  $$('#segFlow button').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); S.flow=b.dataset.v; updCfgTag(); savePrefsSoon(); applyLinkSoon();};
+
+/* Encoding switch: affects TX encoding and RX decoding immediately */
+$('#enc').onchange=()=>{
+  S.encLabel=encName();
+  if(S.connected && S.reader){ try{ S.dec=makeDecoder(); }catch(e){} }
+  updEncTag(); updLen(); savePrefsSoon();
+  toast('Encoding switched: '+(isAscii(S.encLabel)?'ASCII (7-bit)':encName().toUpperCase()),'ok');
+};
+/* Font / size */
+$('#fontSel').onchange=()=>{
+  $('#fontCustom').style.display = $('#fontSel').value==='custom' ? 'block' : 'none';
+  if($('#fontSel').value==='custom') $('#fontCustom').focus();
+  applyFont(); savePrefsSoon(); toast($('#fontSel').value==='__browser__'?'Switched to browser default font':'Font applied to the whole page','ok');
+};
+$('#fontCustom').oninput=()=>{ applyFont(); savePrefsSoon(); };
+$('#fontSz').onchange=()=>{ applyFont(); savePrefsSoon(); toast('Global font size: '+$('#fontSz').value+' px'); };
+$('#btnResetPrefs').onclick=()=>{
+  if(!confirm('Clear settings saved in this browser (line ending / encoding / font / serial parameters, etc.) and reload the page?')) return;
+  localStorage.removeItem(PREF_KEY); location.reload();
+};
+/* Any change to managed fields is written back to the browser */
+PREF_SELECTS.forEach(id=>{ const el=$('#'+id); if(!el) return;
+  el.addEventListener('change',savePrefsSoon); el.addEventListener('input',savePrefsSoon); });
+
+function toggleSwitch(el,cb){ el.onclick=()=>{ el.classList.toggle('on'); cb(el.classList.contains('on')); savePrefsSoon(); }; }
+toggleSwitch($('#swDtr'),async v=>{ S.dtr=v; lamp('lDtr',v); if(S.connected){try{await S.port.setSignals({dataTerminalReady:v});}catch(e){}} });
+toggleSwitch($('#swRts'),async v=>{ S.rts=v; lamp('lRts',v); if(S.connected){try{await S.port.setSignals({requestToSend:v});}catch(e){}} });
+toggleSwitch($('#swHex'),()=>updLen());
+$('#btnBreak').onclick=async()=>{ if(!S.connected) return toast('Not connected','warn');
+  try{ await S.port.setSignals({breakDuration:250}); pushLog('sys','BREAK sent (250ms)',null); toast('BREAK sent'); }catch(e){ toast('BREAK not supported by this port','err'); } };
+$('#btnReset').onclick=async()=>{ if(!S.connected) return toast('Not connected','warn');
+  try{ await S.port.setSignals({dataTerminalReady:false}); await new Promise(r=>setTimeout(r,200));
+       await S.port.setSignals({dataTerminalReady:true}); S.dtr=true; $('#swDtr').classList.add('on'); lamp('lDtr',true);
+       pushLog('sys','DTR reset pulse executed',null); }catch(e){ toast('Reset failed','err'); } };
+
+function toolBtn(id,key,label){
+  $('#'+id).onclick=()=>{ S[key]=!S[key]; $('#'+id).classList.toggle('on',S[key]);
+    if(label) $('#'+id).textContent = label(S[key]);
+    if(key==='hex') rerender();
+    if(key==='filter') rerender(); };
+}
+$('#tHex').onclick=()=>{S.hex=!S.hex; $('#tHex').classList.toggle('on',S.hex); rerender(); savePrefsSoon();};
+$('#tTs').onclick=()=>{S.ts=!S.ts; $('#tTs').classList.toggle('on',S.ts); rerender(); savePrefsSoon();};
+$('#tTx').onclick=()=>{S.showTx=!S.showTx; $('#tTx').classList.toggle('on',S.showTx);
+  $$('#log .line.tx').forEach(n=>n.classList.toggle('hide',!S.showTx)); savePrefsSoon();};
+$('#tScroll').onclick=()=>{S.autoscroll=!S.autoscroll; $('#tScroll').classList.toggle('on',S.autoscroll); savePrefsSoon();};
+$('#tPause').onclick=()=>{S.paused=!S.paused; $('#tPause').classList.toggle('on',S.paused); $('#tPause').textContent=S.paused?'Resume':'Pause'; toast(S.paused?'RX paused':'RX resumed');};
+$('#tClear').onclick=()=>{S.entries=[]; $('#log').innerHTML='<div class="empty" id="empty"><b>BUFFER CLEARED</b>Buffer cleared</div>'; $('#stLines').textContent='Lines 0';};
+$('#tSave').onclick=()=>{
+  if(!S.entries.length) return toast('Log is empty','warn');
+  const eol=($('#eol').value||'\\r\\n').replace('\\r','\r').replace('\\n','\n');   /* export the log with the current line ending, default CRLF */
+  const txt=S.entries.map(e=>`${e.time}  ${{rx:'RX',tx:'TX',sys:'--',err:'!!'}[e.dir]}  ${e.text}`).join(eol);
+  const out=isAscii(S.encLabel)?encodeText(txt,false):new TextEncoder().encode(txt);
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([out],{type:'text/plain;charset=utf-8'}));
+  a.download=`serlink9_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'')}.log`; a.click(); toast('Log exported','ok');
+};
+$('#filter').oninput=e=>{S.filter=e.target.value.trim(); rerender();};
+$('#log').addEventListener('scroll',()=>{ const b=$('#log');
+  const atBottom=b.scrollHeight-b.scrollTop-b.clientHeight<40;
+  if(!atBottom && S.autoscroll){S.autoscroll=false; $('#tScroll').classList.remove('on');} });
+
+/* Send box */
+function updLen(){
+  const v=$('#sendBox').value;
+  let bytes;
+  try{ bytes = $('#swHex').classList.contains('on') ? (parseHex(v)||new Uint8Array()) : encodeText(v); }catch(e){ bytes=[]; }
+  $('#lenTag').textContent=`${v.length} chars / ${bytes.length} bytes`;
+  $('#byteTag').textContent=bytes.length+' B';
+}
+$('#sendBox').addEventListener('input',()=>{updLen(); savePrefsSoon();});
+$('#sendBox').addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault(); doSend();}
+  if(e.key==='ArrowUp' && e.target.selectionStart===0 && S.history.length){
+    e.preventDefault(); S.hIdx=Math.min(S.hIdx+1,S.history.length-1); $('#sendBox').value=S.history[S.hIdx]; }
+  if(e.key==='ArrowDown' && S.hIdx>0){ e.preventDefault(); S.hIdx--; $('#sendBox').value=S.history[S.hIdx]; }
+});
+$('#btnAuto').onclick=()=>{
+  if(S.autoTimer){clearInterval(S.autoTimer);S.autoTimer=null;$('#btnAuto').classList.remove('on');$('#btnAuto').textContent='Start Loop';}
+  else{ const ms=Math.max(50,+$('#interval').value||1000);
+    S.autoTimer=setInterval(doSend,ms); $('#btnAuto').classList.add('on'); $('#btnAuto').textContent='Stop Loop ('+ms+'ms)'; toast('Auto send started · '+ms+'ms'); }
+};
+$('#btnFile').onclick=()=>$('#fileInput').click();
+$('#fileInput').onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  if(!(S.connected||S.demo)) return toast('Connect to a serial port first','warn');
+  const buf=new Uint8Array(await f.arrayBuffer());
+  const bar=$('#fileBar'); bar.style.display='block';
+  toast(`Sending ${f.name} (${fmtN(buf.length)} B)…`);
+  const CH=512;
+  for(let i=0;i<buf.length;i+=CH){
+    await writeBytes(buf.slice(i,i+CH));
+    bar.firstElementChild.style.width=Math.min(100,(i+CH)/buf.length*100)+'%';
+    await new Promise(r=>setTimeout(r,8));
+  }
+  pushLog('sys',`File ${f.name} sent · ${fmtN(buf.length)} bytes`,null);
+  toast('File sent','ok'); setTimeout(()=>{bar.style.display='none';bar.firstElementChild.style.width='0';},1500);
+  e.target.value='';
+};
+
+/* Keyboard shortcuts */
+addEventListener('keydown',e=>{
+  if(!(e.ctrlKey||e.metaKey)) return;
+  const k=e.key.toLowerCase();
+  if(k==='d'){e.preventDefault();connect();}
+  if(k==='h'){e.preventDefault();$('#tHex').click();}
+  if(k==='k'){e.preventDefault();$('#tClear').click();}
+});
+
+/* Init */
+if(!supported){
+  const w=$('#warnbox'); w.style.display='block';
+  w.textContent='⚠ Web Serial API is not supported in this browser. Please use Chrome / Edge / Opera over HTTPS or localhost; you can select "SIM-0 simulated device" to try out the full UI.';
+} else if(!isSecureContext){
+  const w=$('#warnbox'); w.style.display='block';
+  w.textContent='⚠ This page is not a secure context, Web Serial is unavailable. Please open it via HTTPS or http://localhost.';
+}
+applyPrefs(loadPrefs());
+applyFont();
+$('#fontCustom').style.display = $('#fontSel').value==='custom' ? 'block' : 'none';
+updEncTag();
+setState('idle'); updCfgTag(); listPorts(); updLen();
+$('#btnSend').disabled=true;
+</script>
+</body>
+</html>
