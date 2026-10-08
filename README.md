@@ -1,6 +1,6 @@
 # ADS-B Aircraft Receiver · Product Introduction
 
-![Live aircraft map captured with the receiver](ADSB.png)
+<img src="ADSB.png" alt="Live aircraft map captured with the receiver" width="20%" />
 
 ---
 
