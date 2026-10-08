@@ -78,6 +78,31 @@ Sensitivity (the setting that decides how far you hear):
 
 ---
 
+## Web serial terminal
+
+`Web-serial-at.html` in this repository is a browser serial terminal with this module's AT commands built in as one-click buttons — no driver, no serial-tool setup, no install.
+
+**Wire it to a CH340 / CH341 USB-serial adapter**
+
+- `3.3V → VCC` — the module accepts **3.3V only**. On a CH340 breakout the `VCC` pin is 5V taken straight from USB, so **do not use it**: feed 3.3V from the adapter's 3.3V regulator pin, a debugger, or a separate 3.3V supply
+- `GND → GND`
+- `TX → RX` and `RX → TX` — cross the pair, this is the single most common reason for "no reply"
+
+**Connect at 115200 and test the link**
+
+1. Open `Web-serial-at.html` in Chrome / Edge / Opera. Web Serial needs a secure context, so serve it and open `http://localhost:8000/Web-serial-at.html` (for example `python -m http.server 8000` in this folder) — a plain `file://` double-click will show a "not a secure context" warning
+2. Set **Baud rate 115200**, data bits 8, parity None, stop bits 1, flow control None — the factory default
+3. Click **CONNECT** and pick your COM port in the browser prompt; the status bar shows `Connected · 115200 8N1`
+4. Click the **AT** quick command — the terminal answers **`OK`**, the link is alive
+5. Click **AT&V** to list every parameter, then try **AT+TL_MARGIN=8** (more sensitivity) or **AT+PROTOCOL_OUT=MAVLINK2** (ground-station output)
+6. After switching to MAVLink2 the terminal fills with unreadable characters — that is normal, the data is binary. Switch back to `AT+PROTOCOL_OUT=RAW` for readable text, or use the Python viewer below
+
+The quick-command chips (`AT`, `AT&V`, `AT+TL_MARGIN=8`, `AT+GAIN=13`, `AT+PROTOCOL_OUT=MAVLINK2`, `AT+PROTOCOL_OUT=RAW`, `AT+BAUD=115200`, `AT+RST`, `AT+RSTS`) are editable — `+ Add` adds your own, `×` removes one. Line ending, encoding, font and serial parameters are saved in your browser; **Reset** restores the defaults. The panel also has DTR / RTS switches, a `Send BREAK` button and a `DTR reset pulse` button for rebooting the module without unplugging it.
+
+No Web Serial browser available? Pick **SIM-0 · simulated device** in the port list to explore the whole interface offline.
+
+---
+
 ## Companion viewer tool
 
 `mavlink_decoder_win.py` in this repository prints every decoded aircraft in your terminal and logs each record to a `jsonl` file. Set the module to MAVLink output first:
